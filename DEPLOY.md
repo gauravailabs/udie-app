@@ -123,3 +123,39 @@ that explain how to set up the key. Full UI works — just no real AI.
 4. Home dashboard — intelligence briefing
 5. Intelligence tab — ask any question, get structured insight
 6. Tap any insight card → full analysis with actions
+
+---
+
+## SHARED INSIGHTS TABLE (run in Supabase SQL Editor)
+
+This enables short shareable links like `udie-app.vercel.app/?s=abc12345`
+
+```sql
+create table if not exists shared_insights (
+  id          text primary key,           -- 8-char short code e.g. "k7m2x9nq"
+  insight     jsonb not null,             -- the insight data
+  created_at  timestamptz default now()
+);
+
+-- Anyone can read shared insights (no auth needed for view links)
+alter table shared_insights enable row level security;
+create policy "public_read"  on shared_insights for select using (true);
+create policy "auth_insert"  on shared_insights for insert with check (true);
+```
+
+---
+
+## SUPABASE — Fix Email Rate Limit
+
+The "email rate limit exceeded" error is a Supabase FREE plan limit.
+To increase it:
+
+1. Go to **supabase.com** → your project → **Authentication → Rate Limits**
+2. Increase "Password recovery" and "Email OTP" limits
+3. OR upgrade to Supabase Pro ($25/month) for higher limits
+
+For immediate fix without upgrading:
+- Go to **Authentication → Email Templates → Reset Password**
+- The default rate is 3 emails/hour per IP on free tier
+- Wait 1 hour and try again
+

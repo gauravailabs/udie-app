@@ -1,57 +1,30 @@
 import React, { useState } from 'react';
 import { ArrowLeft, TrendingUp, AlertTriangle, CheckCircle2, Clock, Share2, Copy, Check } from 'lucide-react';
+import { createShareLink } from '../logic/share.js';
 import { UrgencyBadge, ModeBadge } from '../components/InsightCard.jsx';
 import { MODES } from '../logic/ai.js';
 
 // ─── Share helpers ────────────────────────────────────────────────────────────
-function buildShareUrl(insight) {
-  // Only encode essential fields — keep URL short enough for WhatsApp
-  const slim = {
-    t:  insight.title,
-    s:  insight.signal,
-    c:  insight.context,
-    i:  insight.impact,
-    a:  insight.actions,
-    u:  insight.urgency,
-    ut: insight.urgency_timeframe,
-    m:  insight.mode,
-    or: insight.opportunity_or_risk,
-    cf: insight.confidence,
-  };
-  // URL-safe base64: replace + → - and / → _ and strip =
-  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(slim))))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  return `${window.location.origin}/?i=${b64}`;
-}
-
-function buildWhatsAppText(insight) {
-  const mode = MODES[insight?.mode];
-  const url  = buildShareUrl(insight);
-  return `${mode?.icon || '🧠'} *${insight?.title}*
-
-${insight?.urgency === 'high' ? '🔴' : insight?.urgency === 'medium' ? '🟡' : '🟢'} ${insight?.urgency?.toUpperCase()} · ${insight?.urgency_timeframe || ''}
-
-📡 ${insight?.signal}
-
-View full analysis: ${url}
-
-_Powered by UDIE — Decision Intelligence Engine_`;
-}
-
 function ShareBar({ insight }) {
-  const [copied, setCopied] = useState(false);
+  const [copied,   setCopied]   = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const [creating, setCreating] = useState(false);
 
-  const shareUrl  = buildShareUrl(insight);
-  const waText    = buildWhatsAppText(insight);
+  // Create short URL once on mount
+  React.useEffect(() => {
+    setCreating(true);
+    createShareLink(insight)
+      .then(url => { setShareUrl(url); setCreating(false); })
+      .catch(() => setCreating(false));
+  }, []);
 
   const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-    } catch {
+    if (!shareUrl) return;
+    try { await navigator.clipboard.writeText(shareUrl); }
+    catch {
       const el = document.createElement('textarea');
       el.value = shareUrl;
-      document.body.appendChild(el);
-      el.select();
+      document.body.appendChild(el); el.select();
       document.execCommand('copy');
       document.body.removeChild(el);
     }
@@ -59,16 +32,16 @@ function ShareBar({ insight }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const waText = `🧠 *${insight?.title}*\n\n${insight?.signal?.slice(0,120)}…\n\nFull analysis: ${shareUrl}`;
+
   const shareWhatsApp = () => {
+    if (!shareUrl) return;
     window.open(`https://wa.me/?text=${encodeURIComponent(waText)}`, '_blank');
   };
 
   const shareNative = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: insight?.title, text: waText, url: shareUrl });
-      } catch {}
-    }
+    if (!shareUrl || !navigator.share) return;
+    try { await navigator.share({ title: insight?.title, text: waText, url: shareUrl }); } catch {}
   };
 
   return (

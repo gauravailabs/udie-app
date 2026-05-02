@@ -11,11 +11,12 @@ import InsightDetailScreen from './screens/InsightDetailScreen.jsx';
 import ProfileScreen       from './screens/ProfileScreen.jsx';
 import SharedInsightScreen from './screens/SharedInsightScreen.jsx';
 import ResetPasswordScreen  from './screens/ResetPasswordScreen.jsx';
+import { isShareUrl } from './logic/share.js';
 import { LayoutDashboard, BrainCircuit, User } from 'lucide-react';
 import './index.css';
 
 // If URL has ?share= param, show public view without login
-const isShareLink = new URLSearchParams(window.location.search).has('share');
+const isShareLink = isShareUrl();
 // Password reset email from Supabase — detect by hash params
 const isResetLink = window.location.hash.includes('access_token') ||
                     window.location.hash.includes('reset-password') ||
