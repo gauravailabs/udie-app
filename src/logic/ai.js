@@ -10,6 +10,22 @@
 
 const API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
 const MODEL   = 'claude-sonnet-4-20250514';
+// ─── Strip <cite> tags from ALL string fields recursively ─────────────────────
+function stripCiteStr(s) {
+  return typeof s !== 'string' ? s
+    : s.replace(/<cite[^>]*>([\s\S]*?)<\/cite>/g, '$1').replace(/<\/?cite[^>]*>/g, '').trim();
+}
+function deepStripCites(obj) {
+  if (typeof obj === 'string') return stripCiteStr(obj);
+  if (Array.isArray(obj))     return obj.map(deepStripCites);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const [k,v] of Object.entries(obj)) out[k] = deepStripCites(v);
+    return out;
+  }
+  return obj;
+}
+
 
 // ─── INTELLIGENCE MODES ───────────────────────────────────────────────────────
 export const MODES = {
@@ -154,9 +170,8 @@ async function callClaude(systemPrompt, userMessage) {
 
   const data = await response.json();
 
-  // Claude may return multiple content blocks when using tools:
-  // text blocks (analysis) + tool_use blocks (search calls) + tool_result blocks
-  // We want the LAST text block — that's the final answer after searching
+  // Claude may return multiple content blocks when using tools
+  // We want the LAST text block — final answer after web searching
   const textBlocks = (data.content || []).filter(b => b.type === 'text');
   const text = textBlocks[textBlocks.length - 1]?.text?.trim() || '';
 
@@ -166,7 +181,10 @@ async function callClaude(systemPrompt, userMessage) {
   const clean = text.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
 
   try {
-    return JSON.parse(clean);
+    const parsed = JSON.parse(clean);
+    // Strip ALL <cite index="...">text</cite> tags from every string field
+    // These come from Claude's web search tool and must never reach the UI
+    return deepStripCites(parsed);
   } catch {
     throw new Error('Could not parse AI response. Please try again.');
   }

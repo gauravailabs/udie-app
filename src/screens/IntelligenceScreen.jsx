@@ -188,7 +188,7 @@ export default function IntelligenceScreen({ navigate }) {
       <div style={{ padding:'14px 14px 0', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
           <div style={{ fontSize:22, fontWeight:700, letterSpacing:'-.04em', color:'var(--text)' }}>Intelligence</div>
-          {results.length > 0 && (
+          {results.filter(e => e.modeId === activeMode).length > 0 && (
             <button onClick={clearAll}
               style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text3)', display:'flex', alignItems:'center', gap:4, fontSize:12, fontFamily:'var(--font-body)' }}>
               <Trash2 size={13}/> Clear
@@ -223,7 +223,7 @@ export default function IntelligenceScreen({ navigate }) {
       <div ref={contentRef} className="content" style={{ paddingTop:0 }}>
 
         {/* Example prompts */}
-        {results.length === 0 && !loading && (
+        {results.filter(e => e.modeId === activeMode).length === 0 && !loading && (
           <div style={{ marginBottom:16 }}>
             <div className="section-title" style={{ margin:'4px 0 8px', display:'flex', alignItems:'center', gap:6 }}>
               <Lightbulb size={10}/> Try asking…
@@ -258,13 +258,15 @@ export default function IntelligenceScreen({ navigate }) {
               <div style={{ fontSize:12, color:'var(--text2)' }}>Searching web · Building context · Formulating actions</div>
             </div>
             <div style={{ display:'flex', gap:5 }}>
-              <div className="typing-dot"/><div className="typing-dot"/><div className="typing-dot"/>
+              {[0,1,2].map(i => (
+                <div key={i} style={{ width:8, height:8, borderRadius:'50%', background:MODES[activeMode]?.color || 'var(--blue)', opacity:0.8, animation:'typingDot 1.4s ease-in-out infinite', animationDelay:`${i*0.2}s` }}/>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Results — each card knows its own locked modeId */}
-        {results.map((entry, idx) => (
+        {/* Results — only show results for the currently active mode */}
+        {results.filter(e => e.modeId === activeMode).map((entry, idx) => (
           <StreamingCard
             key={entry.insight?.id || idx}
             insight={entry.insight}
