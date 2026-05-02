@@ -24,9 +24,14 @@ export default function AuthScreen() {
     setLoading(true); setError(''); setSuccess('');
     try {
       if (tab === 'signup') {
-        const { error: err } = await signUp({ email: e, password: pass });
+        const { user: newUser, error: err } = await signUp({ email: e, password: pass });
         if (err) throw err;
-        setSuccess('Account created! You can now sign in.');
+        if (newUser && !newUser.confirmed_at && !newUser.email_confirmed_at) {
+          // Supabase sends confirmation email — user must click it first
+          setSuccess(`Check your inbox at ${e} for a confirmation link. Click it to activate your account, then sign in here.`);
+        } else {
+          setSuccess('Account created! You can now sign in.');
+        }
         setTab('signin');
       } else {
         const { user, error: err } = await signIn({ email: e, password: pass });
@@ -110,6 +115,11 @@ export default function AuthScreen() {
         </div>
       )}
 
+      {tab === 'signup' && (
+        <div style={{ marginTop:16, padding:'10px 14px', background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)', fontSize:12, color:'var(--text3)', lineHeight:1.5 }}>
+          📧 After creating your account, check your email for a confirmation link before signing in.
+        </div>
+      )}
       <div style={{ marginTop:'auto', paddingTop:24, textAlign:'center', fontSize:11, color:'var(--text3)', lineHeight:1.7 }}>
         🔒 Secured by Supabase · End-to-end encrypted
       </div>

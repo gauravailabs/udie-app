@@ -78,7 +78,13 @@ export function AuthProvider({ children }) {
   // ── SIGN UP ────────────────────────────────────────────────────────────────
   const signUp = async ({ email, password }) => {
     if (isConfigured()) {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: (import.meta.env.VITE_APP_URL || window.location.origin) + '/',
+        },
+      });
       // onAuthStateChange handles setting user + profile
       return { user: data?.user || null, error };
     }

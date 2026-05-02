@@ -12,44 +12,49 @@ const EXAMPLES = {
   organizational: ['How should we restructure for scale?', 'What decisions need to be made this quarter?', 'Where do we have strategic misalignment?'],
 };
 
-// Typewriter effect for streaming UX
-function useTypewriter(text, speed = 18, active = false) {
-  const [displayed, setDisplayed] = useState('');
-  const [done, setDone] = useState(false);
+// Simple typewriter for title only
+function Typewriter({ text, speed = 20, onDone }) {
+  const [shown, setShown] = useState('');
   useEffect(() => {
-    if (!active || !text) { setDisplayed(text || ''); setDone(true); return; }
-    setDisplayed(''); setDone(false);
+    if (!text) return;
+    setShown('');
     let i = 0;
     const iv = setInterval(() => {
-      setDisplayed(text.slice(0, ++i));
-      if (i >= text.length) { clearInterval(iv); setDone(true); }
+      setShown(text.slice(0, ++i));
+      if (i >= text.length) { clearInterval(iv); onDone?.(); }
     }, speed);
     return () => clearInterval(iv);
-  }, [text, active]);
-  return { displayed, done };
+  }, [text]);
+  return <>{shown}<span className="stream-cursor"/></>;
 }
 
-function StreamingInsightCard({ insight, onExpand }) {
-  const [phase, setPhase] = useState(0);
-  const { displayed: titleText, done: titleDone } = useTypewriter(insight?.title, 22, true);
-  const { displayed: signalText, done: signalDone } = useTypewriter(titleDone ? insight?.signal : '', 12, titleDone);
+// Streaming card — shows insight progressively as it arrives
+function StreamingCard({ insight, modeId, onExpand }) {
+  const [phase,    setPhase]    = useState(0); // 0=title 1=signal 2=impact 3=actions 4=done
+  const [titleDone, setTitleDone] = useState(false);
 
-  useEffect(() => { if (titleDone) setPhase(1); }, [titleDone]);
-  useEffect(() => { if (signalDone && signalText) setPhase(2); }, [signalDone, signalText]);
   useEffect(() => {
-    if (phase === 2) { const t = setTimeout(() => setPhase(3), 400); return () => clearTimeout(t); }
-    if (phase === 3) { const t = setTimeout(() => setPhase(4), 700); return () => clearTimeout(t); }
-  }, [phase]);
+    if (titleDone) {
+      const t1 = setTimeout(() => setPhase(1), 100);
+      const t2 = setTimeout(() => setPhase(2), 600);
+      const t3 = setTimeout(() => setPhase(3), 1000);
+      const t4 = setTimeout(() => setPhase(4), 1400);
+      return () => [t1,t2,t3,t4].forEach(clearTimeout);
+    }
+  }, [titleDone]);
 
-  const isStreaming = phase < 4;
-  const mode = MODES[insight?.mode];
+  // Bug 4 fix: ALWAYS use modeId (what user selected), never trust Claude's mode field
+  const mode = MODES[modeId];
+  const isDone = phase >= 4;
 
   return (
-    <div className={isStreaming ? 'stream-card' : 'insight-card card-pressable'}
-      onClick={() => !isStreaming && onExpand(insight)}>
+    <div className={isDone ? 'insight-card card-pressable' : 'stream-card'}
+      onClick={() => isDone && onExpand(insight)}>
+      {/* Mode + urgency — always shows the SELECTED mode */}
       <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>
         {mode && (
-          <span className="badge badge-mode" style={{ background:`${mode.color}18`, color:mode.color, borderColor:`${mode.color}28` }}>
+          <span className="badge badge-mode"
+            style={{ background:`${mode.color}18`, color:mode.color, borderColor:`${mode.color}28` }}>
             {mode.icon} {mode.label}
           </span>
         )}
@@ -58,21 +63,27 @@ function StreamingInsightCard({ insight, onExpand }) {
             {insight.urgency==='high'?'🔴':insight.urgency==='medium'?'🟡':'🟢'} {insight.urgency}
           </span>
         )}
-        {isStreaming && (
+        {!isDone && (
           <span style={{ fontSize:11, color:'var(--blue2)', display:'flex', alignItems:'center', gap:4 }}>
             <span style={{ width:6, height:6, borderRadius:'50%', background:'var(--blue)', display:'inline-block', animation:'typingDot 1.4s ease-in-out infinite' }}/>
             Generating…
           </span>
         )}
       </div>
-      <div style={{ fontSize:17, fontWeight:700, letterSpacing:'-0.03em', lineHeight:1.3, color:'var(--text)', marginBottom:10, minHeight:24 }}>
-        {titleText}{phase===0 && <span className="stream-cursor"/>}
+
+      {/* Title with typewriter */}
+      <div style={{ fontSize:16, fontWeight:700, letterSpacing:'-.03em', lineHeight:1.3, color:'var(--text)', marginBottom:10 }}>
+        {insight?.title
+          ? <Typewriter text={insight.title} onDone={() => setTitleDone(true)} />
+          : <span className="stream-cursor"/>}
       </div>
-      {phase >= 1 && signalText && (
-        <div style={{ fontSize:13, color:'var(--text2)', lineHeight:1.6, marginBottom:10 }}>
-          {signalText}{phase===1 && <span className="stream-cursor"/>}
+
+      {phase >= 1 && insight?.signal && (
+        <div style={{ fontSize:13, color:'var(--text2)', lineHeight:1.6, marginBottom:10, animation:'cardIn .3s ease both' }}>
+          {insight.signal}
         </div>
       )}
+
       {phase >= 2 && insight?.impact?.length > 0 && (
         <div style={{ animation:'cardIn .3s ease both' }}>
           <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:'var(--text3)', marginBottom:6 }}>Impact</div>
@@ -83,6 +94,7 @@ function StreamingInsightCard({ insight, onExpand }) {
           ))}
         </div>
       )}
+
       {phase >= 3 && insight?.actions?.length > 0 && (
         <div style={{ marginTop:10, animation:'cardIn .3s ease both' }}>
           <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:'var(--text3)', marginBottom:6 }}>Actions</div>
@@ -93,8 +105,9 @@ function StreamingInsightCard({ insight, onExpand }) {
           ))}
         </div>
       )}
+
       {phase >= 4 && insight?.urgency_timeframe && (
-        <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', display:'flex', justifyContent:'space-between', alignItems:'center', animation:'cardIn .3s ease both' }}>
           <span style={{ fontSize:11, color:'var(--text3)' }}>⏱ {insight.urgency_timeframe}</span>
           <span style={{ fontSize:11, color:'var(--blue2)', fontWeight:600 }}>Tap for full analysis →</span>
         </div>
@@ -105,138 +118,144 @@ function StreamingInsightCard({ insight, onExpand }) {
 
 export default function IntelligenceScreen({ navigate }) {
   const { profile, user } = useAuth();
+
+  // Bug 4 fix: activeMode is the SINGLE source of truth for which engine runs
+  // It is set when user taps a pill and NEVER changed by AI response
   const [activeMode, setActiveMode] = useState('competitive');
   const [query,   setQuery]   = useState('');
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
+  // Each entry: { insight, modeId } — modeId locked at submit time
   const [results, setResults] = useState([]);
   const textRef    = useRef(null);
   const contentRef = useRef(null);
 
-  // ── KEY FIX: use a ref as synchronous in-flight guard ──────────────────────
-  // React state (loading) is async — two rapid clicks both see loading=false
-  // A ref updates synchronously, preventing any double-submissions
+  // Bug 3 fix: synchronous in-flight guard prevents ANY double submission
   const inFlight = useRef(false);
 
   const submit = async () => {
     const q = query.trim();
-    if (!q || inFlight.current) return; // synchronous guard
+    if (!q || inFlight.current) return;
 
-    inFlight.current = true;  // block immediately — before any await
+    // Lock the mode at submit time — pill changes after won't affect this query
+    const lockedMode = activeMode;
+
+    inFlight.current = true;
     setLoading(true);
     setError('');
     setQuery('');
     if (textRef.current) textRef.current.style.height = 'auto';
 
     try {
-      // Only ONE mode called — whichever is selected in the pill
-      const insight  = await generateInsight({ query: q, mode: activeMode, profile });
-      const withMode = { ...insight, mode: activeMode };
+      // ONE call, ONE mode, ONE result
+      const insight = await generateInsight({ query: q, mode: lockedMode, profile });
 
-      setResults(prev => [withMode, ...prev]);
+      // Bug 4 fix: force mode to lockedMode regardless of what Claude returned
+      const withMode = { ...insight, mode: lockedMode };
+
+      // Prepend with { insight, modeId } so StreamingCard knows the locked mode
+      setResults(prev => [{ insight: withMode, modeId: lockedMode }, ...prev]);
       saveInsightLocally(withMode, user?.id);
       if (user?.id) saveInsightToDB(withMode, user.id).catch(() => {});
 
       setTimeout(() => contentRef.current?.scrollTo({ top:0, behavior:'smooth' }), 100);
     } catch (e) {
-      setError(e.message || 'Intelligence generation failed. Check your VITE_ANTHROPIC_API_KEY in Vercel env vars.');
+      setError(e.message || 'Intelligence generation failed. Check your VITE_ANTHROPIC_API_KEY.');
     } finally {
       setLoading(false);
-      inFlight.current = false; // release guard
+      inFlight.current = false;
     }
   };
 
-  const handleKey   = e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
-  const autoResize  = e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'; };
-  const clearAll    = () => { if (confirm('Clear this session\'s results?')) setResults([]); };
+  const handleKey  = e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
+  const autoResize = e => { e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,120)+'px'; };
+  const clearAll   = () => { if (confirm('Clear this session\'s results?')) setResults([]); };
+  const pickExample = q => { setQuery(q); textRef.current?.focus(); };
 
-  // Clicking an example ONLY fills the input — user must press Send themselves
-  const pickExample = (q) => {
-    setQuery(q);
-    textRef.current?.focus();
+  // Bug 4 fix: clear results when mode changes so old mode results don't confuse
+  const handleModeChange = (id) => {
+    setActiveMode(id);
+    setError('');
+    // Don't clear results — user may want to compare across modes
+    // But DO reset query input
+    setQuery('');
   };
 
   const examples = EXAMPLES[activeMode] || EXAMPLES.competitive;
 
   return (
     <div className="screen">
-      {/* Header */}
-      <div style={{ padding:'16px 14px 0', flexShrink:0 }}>
+      <div style={{ padding:'14px 14px 0', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
-          <div style={{ fontSize:22, fontWeight:700, letterSpacing:'-.04em' }}>Intelligence</div>
+          <div style={{ fontSize:22, fontWeight:700, letterSpacing:'-.04em', color:'var(--text)' }}>Intelligence</div>
           {results.length > 0 && (
             <button onClick={clearAll}
-              style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text3)', display:'flex', alignItems:'center', gap:4, fontSize:12 }}>
+              style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text3)', display:'flex', alignItems:'center', gap:4, fontSize:12, fontFamily:'var(--font-body)' }}>
               <Trash2 size={13}/> Clear
             </button>
           )}
         </div>
         <div style={{ fontSize:13, color:'var(--text2)', marginBottom:12 }}>
-          Ask anything. One question → one engine → one insight.
+          One question · one engine · one insight.
         </div>
 
-        {/* Mode selector — determines which single engine runs */}
+        {/* Mode pills */}
         <div className="modes-scroll" style={{ margin:'0 -14px', padding:'0 14px 2px' }}>
           {Object.values(MODES).map(m => (
             <button key={m.id}
               className={`mode-pill ${activeMode===m.id?'active':''}`}
-              style={activeMode===m.id ? { borderColor:m.color, background:`${m.color}15` } : {}}
-              onClick={() => { setActiveMode(m.id); setError(''); }}>
+              style={activeMode===m.id?{borderColor:m.color,background:`${m.color}15`}:{}}
+              onClick={() => handleModeChange(m.id)}>
               <span className="mode-pill-icon">{m.icon}</span>
               <span className="mode-pill-label" style={activeMode===m.id?{color:m.color}:{}}>{m.label}</span>
             </button>
           ))}
         </div>
 
-        {/* Active mode description */}
-        <div style={{ fontSize:11, color:'var(--text3)', marginTop:7, marginBottom:12, padding:'6px 10px', background:'var(--surface)', borderRadius:'var(--r-sm)', border:'1px solid var(--border)' }}>
-          🔍 Active engine: <strong style={{ color:'var(--text2)' }}>{MODES[activeMode]?.label}</strong> — {MODES[activeMode]?.desc}
+        {/* Active engine indicator */}
+        <div style={{ fontSize:11, color:'var(--text3)', marginTop:8, marginBottom:12, padding:'6px 10px', background:'var(--surface)', borderRadius:'var(--r-sm)', border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ width:6, height:6, borderRadius:'50%', background:MODES[activeMode]?.color, flexShrink:0, display:'inline-block' }}/>
+          Active: <strong style={{ color:'var(--text2)' }}>{MODES[activeMode]?.label}</strong> — {MODES[activeMode]?.desc}
         </div>
       </div>
 
-      {/* Scrollable content */}
+      {/* Scrollable results */}
       <div ref={contentRef} className="content" style={{ paddingTop:0 }}>
 
-        {/* Example prompts — tap to fill, not to submit */}
+        {/* Example prompts */}
         {results.length === 0 && !loading && (
           <div style={{ marginBottom:16 }}>
             <div className="section-title" style={{ margin:'4px 0 8px', display:'flex', alignItems:'center', gap:6 }}>
-              <Lightbulb size={10}/> Example questions for {MODES[activeMode]?.label}
+              <Lightbulb size={10}/> Try asking…
             </div>
             {examples.map((q, i) => (
               <button key={i} onClick={() => pickExample(q)}
-                style={{ display:'block', width:'100%', textAlign:'left', padding:'11px 14px', marginBottom:6, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)', fontSize:13, color:'var(--text2)', cursor:'pointer', fontFamily:'var(--font-body)', transition:'all .15s', lineHeight:1.4 }}
-                onMouseEnter={e => e.currentTarget.style.borderColor='var(--border2)'}
-                onMouseLeave={e => e.currentTarget.style.borderColor='var(--border)'}>
+                style={{ display:'block', width:'100%', textAlign:'left', padding:'11px 14px', marginBottom:6, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--r-md)', fontSize:13, color:'var(--text2)', cursor:'pointer', fontFamily:'var(--font-body)', transition:'border-color .15s', lineHeight:1.4 }}
+                onTouchStart={e => e.currentTarget.style.borderColor='var(--border2)'}
+                onTouchEnd={e => e.currentTarget.style.borderColor='var(--border)'}>
                 "{q}"
               </button>
             ))}
-            <div style={{ fontSize:11, color:'var(--text3)', textAlign:'center', marginTop:4 }}>
-              Tap a question to fill it in, then press ↑ to send
+            <div style={{ fontSize:11, color:'var(--text3)', textAlign:'center', marginTop:6 }}>
+              Tap to fill · press ↑ to send
             </div>
           </div>
         )}
 
         {/* Error */}
-        {error && (
-          <div className="alert alert-error" style={{ marginBottom:12 }}>
-            {error}
-          </div>
-        )}
+        {error && <div className="alert alert-error" style={{ marginBottom:12 }}>{error}</div>}
 
-        {/* Loading indicator */}
+        {/* Loading — shows which engine is running */}
         {loading && (
           <div className="typing-indicator">
-            <div style={{ width:36, height:36, borderRadius:10, background:'var(--blue-bg)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:`${MODES[activeMode]?.color}18`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>
               {MODES[activeMode]?.icon}
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:14, fontWeight:600, color:'var(--text)', marginBottom:3 }}>
                 {MODES[activeMode]?.label} engine running…
               </div>
-              <div style={{ fontSize:12, color:'var(--text2)' }}>
-                Searching web · Building context · Formulating actions
-              </div>
+              <div style={{ fontSize:12, color:'var(--text2)' }}>Searching web · Building context · Formulating actions</div>
             </div>
             <div style={{ display:'flex', gap:5 }}>
               <div className="typing-dot"/><div className="typing-dot"/><div className="typing-dot"/>
@@ -244,11 +263,12 @@ export default function IntelligenceScreen({ navigate }) {
           </div>
         )}
 
-        {/* Results */}
-        {results.map((insight, idx) => (
-          <StreamingInsightCard
-            key={insight.id || idx}
-            insight={insight}
+        {/* Results — each card knows its own locked modeId */}
+        {results.map((entry, idx) => (
+          <StreamingCard
+            key={entry.insight?.id || idx}
+            insight={entry.insight}
+            modeId={entry.modeId}
             onExpand={i => navigate('detail', { insight: i })}
           />
         ))}
@@ -256,8 +276,8 @@ export default function IntelligenceScreen({ navigate }) {
         <div style={{ height:120 }}/>
       </div>
 
-      {/* Query input — pinned bottom */}
-      <div style={{ padding:'10px 14px', paddingBottom:`calc(10px + env(safe-area-inset-bottom,0px))`, background:'rgba(3,8,15,.96)', backdropFilter:'blur(24px)', borderTop:'1px solid var(--border)', flexShrink:0 }}>
+      {/* Query input */}
+      <div style={{ padding:'10px 14px', paddingBottom:`calc(10px + env(safe-area-inset-bottom,0px))`, background:'rgba(3,8,15,.96)', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', borderTop:'1px solid var(--border)', flexShrink:0 }}>
         <div className="query-box">
           <textarea ref={textRef} className="query-input"
             placeholder={`Ask ${MODES[activeMode]?.label} intelligence…`}
