@@ -60,7 +60,7 @@ export default function ProfileScreen({ navigate }) {
     try {
       if (isConfigured()) {
         const { error } = await supabase.auth.resetPasswordForEmail(pwEmail.trim(), {
-          redirectTo: window.location.origin + '/reset-password',
+          redirectTo: (import.meta.env.VITE_APP_URL || window.location.origin) + '/reset-password',
         });
         if (error) throw error;
         setPwSent(true);
@@ -76,8 +76,16 @@ export default function ProfileScreen({ navigate }) {
     }
   };
 
+  const [signingOut, setSigningOut] = useState(false);
   const handleSignOut = async () => {
-    await signOut();
+    if (signingOut) return;
+    setSigningOut(true);
+    try { await signOut(); } catch {}
+    // App.jsx will redirect to AuthScreen once user state clears
+    // If it doesn't within 2s, force reload
+    setTimeout(() => {
+      if (window.location.pathname !== '/') window.location.reload();
+    }, 2000);
   };
 
   const handleClearInsights = () => {
@@ -300,14 +308,14 @@ export default function ProfileScreen({ navigate }) {
               icon: theme==='dark'?<Moon size={16} color="var(--blue-light)"/>:<Sun size={16} color="var(--amber)"/>,
               iconBg: theme==='dark'?'var(--blue-bg)':'var(--amber-bg)',
               label: theme==='dark'?'Dark Mode':'Light Mode',
-              sub:'Tap to switch theme',
-              action: toggleTheme,
+              sub:'Tap toggle to switch',
+              action: null,
               right: <ThemeToggle />,
             },
           ].map((item, i, arr) => (
-            <div key={i} onClick={item.action}
-              style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', cursor:'pointer', borderBottom: i<arr.length-1?'1px solid var(--border)':'none', transition:'background .15s' }}
-              onMouseEnter={e => e.currentTarget.style.background='var(--surface2)'}
+            <div key={i} onClick={item.action || undefined}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', cursor: item.action ? 'pointer' : 'default', borderBottom: i<arr.length-1?'1px solid var(--border)':'none', transition:'background .15s' }}
+              onMouseEnter={e => { if(item.action) e.currentTarget.style.background='var(--surface2)'; }}
               onMouseLeave={e => e.currentTarget.style.background=''}>
               <div className="list-icon" style={{ background:item.iconBg }}>{item.icon}</div>
               <div style={{ flex:1 }}>
@@ -332,13 +340,18 @@ export default function ProfileScreen({ navigate }) {
             <ChevronRight size={15} color="var(--text3)"/>
           </div>
           <div onClick={handleSignOut}
-            style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', cursor:'pointer' }}>
-            <div className="list-icon" style={{ background:'var(--red-bg)' }}><LogOut size={16} color="var(--red)"/></div>
+            style={{ display:'flex', alignItems:'center', gap:12, padding:'14px 16px', cursor: signingOut ? 'not-allowed' : 'pointer', opacity: signingOut ? 0.6 : 1, transition:'opacity .2s' }}>
+            <div className="list-icon" style={{ background:'var(--red-bg)' }}>
+              {signingOut
+                ? <div style={{ width:16, height:16, border:'2px solid var(--red)', borderTopColor:'transparent', borderRadius:'50%', animation:'spin .7s linear infinite' }}/>
+                : <LogOut size={16} color="var(--red)"/>
+              }
+            </div>
             <div style={{ flex:1 }}>
-              <div style={{ fontSize:14, fontWeight:600, color:'var(--red)' }}>Sign Out</div>
+              <div style={{ fontSize:14, fontWeight:600, color:'var(--red)' }}>{signingOut ? 'Signing out…' : 'Sign Out'}</div>
               <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>Signed in as {email}</div>
             </div>
-            <ChevronRight size={15} color="var(--text3)"/>
+            {!signingOut && <ChevronRight size={15} color="var(--text3)"/>}
           </div>
         </div>
 

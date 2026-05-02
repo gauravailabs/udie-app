@@ -9,8 +9,12 @@ import HomeScreen          from './screens/HomeScreen.jsx';
 import IntelligenceScreen  from './screens/IntelligenceScreen.jsx';
 import InsightDetailScreen from './screens/InsightDetailScreen.jsx';
 import ProfileScreen       from './screens/ProfileScreen.jsx';
+import SharedInsightScreen from './screens/SharedInsightScreen.jsx';
 import { LayoutDashboard, BrainCircuit, User } from 'lucide-react';
 import './index.css';
+
+// If URL has ?share= param, show public view without login
+const isShareLink = new URLSearchParams(window.location.search).has('share');
 
 function TabBar({ active, onChange }) {
   const tabs = [
@@ -95,6 +99,9 @@ function Router() {
 }
 
 export default function App() {
+  // Public share links bypass auth entirely
+  if (isShareLink) return <ThemeProvider><SharedInsightScreen /></ThemeProvider>;
+
   return (
     <ThemeProvider>
       <AuthProvider>
