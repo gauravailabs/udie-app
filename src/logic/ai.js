@@ -186,9 +186,10 @@ export function loadInsightsLocally() {
   catch { return []; }
 }
 
+import { sb } from '../db/supabase.js';
+
 export async function saveInsightToDB(insight, userId) {
   if (!userId) return;
-  const { sb } = await import('../db/supabase.js');
   await sb(s => s.from('insights').insert({
     user_id:    userId,
     mode:       insight.mode,
