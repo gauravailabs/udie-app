@@ -12,13 +12,20 @@ function shortId() {
 }
 
 // ── Slim down insight to only shareable fields ────────────────────────────────
+function stripCites(text) {
+  return (text || '')
+    .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
+    .replace(/<[^>]+>/g, '')
+    .trim();
+}
+
 function slimInsight(insight) {
   return {
-    title:               insight.title               || '',
-    signal:              insight.signal              || '',
-    context:             insight.context             || '',
-    impact:              insight.impact              || [],
-    actions:             insight.actions             || [],
+    title:               stripCites(insight.title),
+    signal:              stripCites(insight.signal),
+    context:             stripCites(insight.context),
+    impact:              (insight.impact  || []).map(s => stripCites(s)),
+    actions:             (insight.actions || []).map(a => ({ ...a, action: stripCites(a.action) })),
     urgency:             insight.urgency             || 'medium',
     urgency_timeframe:   insight.urgency_timeframe   || '',
     mode:                insight.mode                || '',
