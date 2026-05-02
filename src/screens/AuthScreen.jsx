@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { isConfigured } from '../db/supabase.js';
 import { Eye, EyeOff, ArrowRight } from 'lucide-react';
 
 export default function AuthScreen() {
@@ -102,10 +103,12 @@ export default function AuthScreen() {
         )}
       </button>
 
-      {/* Demo note */}
-      <div style={{ marginTop:16, padding:'12px 14px', background:'var(--blue-bg)', border:'1px solid var(--border2)', borderRadius:'var(--r-md)', fontSize:12, color:'var(--text2)', lineHeight:1.5 }}>
-        <strong style={{ color:'var(--blue2)' }}>Demo mode:</strong> No Supabase configured. Use any email + password (6+ chars) to continue.
-      </div>
+      {/* Only show demo notice when Supabase is genuinely not configured */}
+      {!isConfigured() && (
+        <div style={{ marginTop:16, padding:'12px 14px', background:'var(--blue-bg)', border:'1px solid var(--border2)', borderRadius:'var(--r-md)', fontSize:12, color:'var(--text2)', lineHeight:1.5 }}>
+          <strong style={{ color:'var(--blue2)' }}>Demo mode:</strong> No Supabase configured. Use any email + password (6+ chars) to continue.
+        </div>
+      )}
 
       <div style={{ marginTop:'auto', paddingTop:24, textAlign:'center', fontSize:11, color:'var(--text3)', lineHeight:1.7 }}>
         🔒 Secured by Supabase · End-to-end encrypted
