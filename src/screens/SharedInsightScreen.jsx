@@ -12,9 +12,26 @@ export default function SharedInsightScreen() {
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      const raw    = params.get('share');
+      const raw    = params.get('i') || params.get('share'); // support both old and new format
       if (!raw) { setError('No insight data in this link.'); return; }
-      const decoded = JSON.parse(atob(decodeURIComponent(raw)));
+      // Decode URL-safe base64 (- → +, _ → /, add padding)
+      const b64     = raw.replace(/-/g, '+').replace(/_/g, '/');
+      const padded  = b64 + '=='.slice(0, (4 - b64.length % 4) % 4);
+      const json    = decodeURIComponent(escape(atob(padded)));
+      const slim    = JSON.parse(json);
+      // Map short keys back to full keys if needed
+      const decoded = slim.title ? slim : {
+        title:               slim.t,
+        signal:              slim.s,
+        context:             slim.c,
+        impact:              slim.i,
+        actions:             slim.a,
+        urgency:             slim.u,
+        urgency_timeframe:   slim.ut,
+        mode:                slim.m,
+        opportunity_or_risk: slim.or,
+        confidence:          slim.cf,
+      };
       setInsight(decoded);
     } catch {
       setError('This link appears to be invalid or expired.');
@@ -44,7 +61,7 @@ export default function SharedInsightScreen() {
   const accentColor = insight.urgency === 'high' ? '#FF4D6A' : insight.urgency === 'medium' ? '#FFB547' : '#00D68F';
 
   return (
-    <div style={{ minHeight:'100dvh', background:'#03080F', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', padding:'0 0 40px' }}>
+    <div style={{ minHeight:'100dvh', height:'100dvh', overflow:'auto', background:'#03080F', fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', padding:'0 0 60px' }}>
       {/* Header */}
       <div style={{ background:'rgba(0,0,0,0.8)', backdropFilter:'blur(20px)', padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.08)', display:'flex', alignItems:'center', justifyContent:'space-between', position:'sticky', top:0, zIndex:10 }}>
         <div>

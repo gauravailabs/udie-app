@@ -5,10 +5,23 @@ import { MODES } from '../logic/ai.js';
 
 // ─── Share helpers ────────────────────────────────────────────────────────────
 function buildShareUrl(insight) {
-  // Encode the full insight as base64 in the URL — no backend needed
-  const base64 = encodeURIComponent(btoa(JSON.stringify(insight)));
-  const origin = window.location.origin;
-  return `${origin}/?share=${base64}`;
+  // Only encode essential fields — keep URL short enough for WhatsApp
+  const slim = {
+    t:  insight.title,
+    s:  insight.signal,
+    c:  insight.context,
+    i:  insight.impact,
+    a:  insight.actions,
+    u:  insight.urgency,
+    ut: insight.urgency_timeframe,
+    m:  insight.mode,
+    or: insight.opportunity_or_risk,
+    cf: insight.confidence,
+  };
+  // URL-safe base64: replace + → - and / → _ and strip =
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(slim))))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  return `${window.location.origin}/?i=${b64}`;
 }
 
 function buildWhatsAppText(insight) {

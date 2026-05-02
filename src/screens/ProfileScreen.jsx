@@ -60,7 +60,7 @@ export default function ProfileScreen({ navigate }) {
     try {
       if (isConfigured()) {
         const { error } = await supabase.auth.resetPasswordForEmail(pwEmail.trim(), {
-          redirectTo: (import.meta.env.VITE_APP_URL || window.location.origin) + '/reset-password',
+          redirectTo: (import.meta.env.VITE_APP_URL || 'https://udie-app.vercel.app') + '/#reset-password',
         });
         if (error) throw error;
         setPwSent(true);
