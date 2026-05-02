@@ -54,6 +54,9 @@ COMPANY CONTEXT: ${ctx}
 INTELLIGENCE MODE: ${m.label.toUpperCase()}
 Focus: ${m.focus}
 
+CRITICAL INSTRUCTION — SEARCH FIRST:
+Before answering, use the web_search tool to find the LATEST real-world information relevant to this query. Search for recent news, developments, and data from the past 30 days. Ground every insight in current, verifiable facts — not just training data. Today's date is ${new Date().toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' })}.
+
 RULES:
 1. Respond ONLY with valid JSON — no markdown, no explanation, no text outside JSON
 2. Every insight must be specific to this company's context, not generic
@@ -84,18 +87,25 @@ function buildScanPrompt(profile) {
     ? `Company: ${profile.company_name}, Industry: ${profile.industry}, Stage: ${profile.stage}, Geography: ${profile.geography}, Priorities: ${profile.priorities}`
     : 'General business context';
 
-  return `You are UDIE — Decision Intelligence Engine. Generate a briefing of exactly 3 intelligence insights for this company.
+  const today = new Date().toLocaleDateString('en-IN', { day:'numeric', month:'long', year:'numeric' });
+
+  return `You are UDIE — Decision Intelligence Engine. Today is ${today}.
 
 ${ctx}
 
-Generate 3 insights across different domains (one competitive threat, one growth opportunity, one regulatory/market risk). Make them specific and actionable for today's environment.
+INSTRUCTIONS:
+1. Use web_search to find the LATEST news and developments from the past 7-30 days relevant to this company's industry and geography
+2. Search for: recent competitor moves, regulatory changes, market trends, and growth signals specific to their sector
+3. Generate exactly 3 intelligence insights based on what you actually find — not generic advice
 
-Respond ONLY with a JSON array:
+Each insight must reference real, current, searchable information.
+
+Respond ONLY with a JSON array (no markdown, no explanation):
 [
   {
-    "title": "insight title",
-    "signal": "key signal",
-    "context": "why it matters",
+    "title": "insight title referencing real event",
+    "signal": "specific signal with real data/source",
+    "context": "why this matters for this company specifically",
     "impact": ["impact 1", "impact 2"],
     "actions": [{"action": "...", "owner": "...", "timeline": "..."}],
     "urgency": "high|medium|low",
@@ -116,16 +126,23 @@ async function callClaude(systemPrompt, userMessage) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
-      'Content-Type':                             'application/json',
-      'x-api-key':                                API_KEY,
-      'anthropic-version':                        '2023-06-01',
+      'Content-Type':                              'application/json',
+      'x-api-key':                                 API_KEY,
+      'anthropic-version':                         '2023-06-01',
       'anthropic-dangerous-direct-browser-access': 'true',
     },
     body: JSON.stringify({
       model:      MODEL,
-      max_tokens: 2048,
+      max_tokens: 4096,
       system:     systemPrompt,
       messages:   [{ role: 'user', content: userMessage }],
+      // ── Web search: Claude searches the live web before answering ──
+      tools: [
+        {
+          type: 'web_search_20250305',
+          name: 'web_search',
+        }
+      ],
     }),
   });
 
@@ -136,7 +153,14 @@ async function callClaude(systemPrompt, userMessage) {
   }
 
   const data = await response.json();
-  const text = (data.content?.[0]?.text || '').trim();
+
+  // Claude may return multiple content blocks when using tools:
+  // text blocks (analysis) + tool_use blocks (search calls) + tool_result blocks
+  // We want the LAST text block — that's the final answer after searching
+  const textBlocks = (data.content || []).filter(b => b.type === 'text');
+  const text = textBlocks[textBlocks.length - 1]?.text?.trim() || '';
+
+  if (!text) throw new Error('No response from AI. Please try again.');
 
   // Strip markdown code fences if present
   const clean = text.replace(/^```json\s*/,'').replace(/\s*```$/,'').trim();
