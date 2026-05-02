@@ -123,7 +123,8 @@ export default function IntelligenceScreen({ navigate }) {
   // It is set when user taps a pill and NEVER changed by AI response
   const [activeMode, setActiveMode] = useState('competitive');
   const [query,   setQuery]   = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [loadingMode, setLoadingMode] = useState(null);
   const [error,   setError]   = useState('');
   // Each entry: { insight, modeId } — modeId locked at submit time
   const [results, setResults] = useState([]);
@@ -142,6 +143,7 @@ export default function IntelligenceScreen({ navigate }) {
 
     inFlight.current = true;
     setLoading(true);
+    setLoadingMode(lockedMode);  // lock which engine shows as running
     setError('');
     setQuery('');
     if (textRef.current) textRef.current.style.height = 'auto';
@@ -163,6 +165,7 @@ export default function IntelligenceScreen({ navigate }) {
       setError(e.message || 'Intelligence generation failed. Check your VITE_ANTHROPIC_API_KEY.');
     } finally {
       setLoading(false);
+      setLoadingMode(null);
       inFlight.current = false;
     }
   };
@@ -213,9 +216,12 @@ export default function IntelligenceScreen({ navigate }) {
         </div>
 
         {/* Active engine indicator */}
-        <div style={{ fontSize:11, color:'var(--text3)', marginTop:8, marginBottom:12, padding:'6px 10px', background:'var(--surface)', borderRadius:'var(--r-sm)', border:'1px solid var(--border)', display:'flex', alignItems:'center', gap:6 }}>
-          <span style={{ width:6, height:6, borderRadius:'50%', background:MODES[activeMode]?.color, flexShrink:0, display:'inline-block' }}/>
-          Active: <strong style={{ color:'var(--text2)' }}>{MODES[activeMode]?.label}</strong> — {MODES[activeMode]?.desc}
+        <div style={{ fontSize:11, color:'var(--text3)', marginTop:8, marginBottom:12, padding:'6px 10px', background: loading && loadingMode !== activeMode ? 'var(--amber-bg)' : 'var(--surface)', borderRadius:'var(--r-sm)', border:`1px solid ${loading && loadingMode !== activeMode ? 'var(--amber)' : 'var(--border)'}`, display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ width:6, height:6, borderRadius:'50%', background: loading && loadingMode !== activeMode ? 'var(--amber)' : MODES[activeMode]?.color, flexShrink:0, display:'inline-block', animation: loading && loadingMode !== activeMode ? 'none' : 'none' }}/>
+          {loading && loadingMode && loadingMode !== activeMode
+            ? <><strong style={{ color:'var(--amber)' }}>{MODES[loadingMode]?.icon} {MODES[loadingMode]?.label} running</strong> — switch back to see result</>
+            : <>Active: <strong style={{ color:'var(--text2)' }}>{MODES[activeMode]?.label}</strong> — {MODES[activeMode]?.desc}</>
+          }
         </div>
       </div>
 
@@ -246,20 +252,20 @@ export default function IntelligenceScreen({ navigate }) {
         {error && <div className="alert alert-error" style={{ marginBottom:12 }}>{error}</div>}
 
         {/* Loading — shows which engine is running */}
-        {loading && (
+        {loading && loadingMode === activeMode && (
           <div className="typing-indicator">
             <div style={{ width:36, height:36, borderRadius:10, background:`${MODES[activeMode]?.color}18`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, flexShrink:0 }}>
-              {MODES[activeMode]?.icon}
+              {MODES[loadingMode]?.icon}
             </div>
             <div style={{ flex:1 }}>
               <div style={{ fontSize:14, fontWeight:600, color:'var(--text)', marginBottom:3 }}>
-                {MODES[activeMode]?.label} engine running…
+                {MODES[loadingMode]?.label} engine running…
               </div>
               <div style={{ fontSize:12, color:'var(--text2)' }}>Searching web · Building context · Formulating actions</div>
             </div>
             <div style={{ display:'flex', gap:5 }}>
               {[0,1,2].map(i => (
-                <div key={i} style={{ width:8, height:8, borderRadius:'50%', background:MODES[activeMode]?.color || 'var(--blue)', opacity:0.8, animation:'typingDot 1.4s ease-in-out infinite', animationDelay:`${i*0.2}s` }}/>
+                <div key={i} style={{ width:8, height:8, borderRadius:'50%', background:MODES[loadingMode]?.color || 'var(--blue)', opacity:0.8, animation:'typingDot 1.4s ease-in-out infinite', animationDelay:`${i*0.2}s` }}/>
               ))}
             </div>
           </div>
