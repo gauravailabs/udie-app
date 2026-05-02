@@ -29,7 +29,7 @@ export default function ProfileScreen({ navigate }) {
   const [pwLoading, setPwLoading] = useState(false);
   const [pwError, setPwError]   = useState('');
 
-  const insights = loadInsightsLocally();
+  const insights = loadInsightsLocally(user?.id);
   const email    = user?.email || '';
   const initials = (profile?.company_name || email)?.[0]?.toUpperCase() || 'U';
 
@@ -82,7 +82,11 @@ export default function ProfileScreen({ navigate }) {
 
   const handleClearInsights = () => {
     if (!confirm('Clear all saved insights? This cannot be undone.')) return;
-    try { localStorage.removeItem('udie_insights'); } catch {}
+    try {
+      const key = `udie_insights_${user?.id || 'guest'}`;
+      localStorage.removeItem(key);
+      localStorage.removeItem(`udie_last_scan_${user?.id || 'guest'}`);
+    } catch {}
     window.location.reload();
   };
 

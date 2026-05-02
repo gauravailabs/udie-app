@@ -196,36 +196,71 @@ export async function generateHomeScan(profile) {
   }));
 }
 
-// ─── LOCAL STORAGE ────────────────────────────────────────────────────────────
-export function saveInsightLocally(insight) {
+// ─── LOCAL STORAGE — per-user, with scan timestamp ───────────────────────────
+function insightsKey(userId) {
+  return userId ? `udie_insights_${userId}` : 'udie_insights_guest';
+}
+
+function scanKey(userId) {
+  return userId ? `udie_last_scan_${userId}` : 'udie_last_scan_guest';
+}
+
+export function saveInsightLocally(insight, userId) {
   try {
-    const existing = JSON.parse(localStorage.getItem('udie_insights') || '[]');
-    const updated  = [insight, ...existing].slice(0, 50);
-    localStorage.setItem('udie_insights', JSON.stringify(updated));
+    const key      = insightsKey(userId);
+    const existing = JSON.parse(localStorage.getItem(key) || '[]');
+    // Avoid duplicate ids
+    const deduped  = [insight, ...existing.filter(e => e.id !== insight.id)].slice(0, 100);
+    localStorage.setItem(key, JSON.stringify(deduped));
   } catch {}
 }
 
-export function loadInsightsLocally() {
-  try { return JSON.parse(localStorage.getItem('udie_insights') || '[]'); }
-  catch { return []; }
+export function loadInsightsLocally(userId) {
+  try {
+    const key = insightsKey(userId);
+    const data = JSON.parse(localStorage.getItem(key) || '[]');
+    // Also check legacy key and merge once
+    if (data.length === 0 && userId) {
+      const legacy = JSON.parse(localStorage.getItem('udie_insights') || '[]');
+      if (legacy.length > 0) {
+        localStorage.setItem(key, JSON.stringify(legacy));
+        localStorage.removeItem('udie_insights');
+        return legacy;
+      }
+    }
+    return data;
+  } catch { return []; }
+}
+
+export function getLastScanTime(userId) {
+  try {
+    const ts = localStorage.getItem(scanKey(userId));
+    return ts ? parseInt(ts) : 0;
+  } catch { return 0; }
+}
+
+export function markScanTime(userId) {
+  try { localStorage.setItem(scanKey(userId), Date.now().toString()); } catch {}
 }
 
 import { sb } from '../db/supabase.js';
 
 export async function saveInsightToDB(insight, userId) {
   if (!userId) return;
-  await sb(s => s.from('insights').insert({
-    user_id:    userId,
-    mode:       insight.mode,
-    title:      insight.title,
-    signal:     insight.signal,
-    context:    insight.context,
-    impact:     insight.impact,
-    actions:    insight.actions,
-    urgency:    insight.urgency,
-    data:       insight,
-    created_at: insight.created_at,
-  })).catch(() => {});
+  try {
+    await sb(s => s.from('insights').insert({
+      user_id:    userId,
+      mode:       insight.mode,
+      title:      insight.title,
+      signal:     insight.signal,
+      context:    insight.context,
+      impact:     insight.impact,
+      actions:    insight.actions,
+      urgency:    insight.urgency,
+      data:       insight,
+      created_at: insight.created_at,
+    }));
+  } catch {} // Never crash the UI over a DB save
 }
 
 // ─── DEMO FALLBACK ────────────────────────────────────────────────────────────
