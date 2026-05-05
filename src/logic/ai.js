@@ -139,28 +139,55 @@ async function callClaude(systemPrompt, userMessage) {
     return generateDemoInsight(userMessage, systemPrompt.includes('"mode"') ? 'scan' : 'single');
   }
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type':                              'application/json',
-      'x-api-key':                                 API_KEY,
-      'anthropic-version':                         '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model:      MODEL,
-      max_tokens: 4096,
-      system:     systemPrompt,
-      messages:   [{ role: 'user', content: userMessage }],
-      // ── Web search: Claude searches the live web before answering ──
-      tools: [
-        {
-          type: 'web_search_20250305',
-          name: 'web_search',
-        }
-      ],
-    }),
-  });
+  // Web search calls can take 15-30s. Use 55s timeout to survive slow mobile networks.
+  // Retry once on network-level failures ("Load failed" / "Failed to fetch").
+  const doFetch = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 55000); // 55s timeout
+
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type':                              'application/json',
+          'x-api-key':                                 API_KEY,
+          'anthropic-version':                         '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model:      MODEL,
+          max_tokens: 4096,
+          system:     systemPrompt,
+          messages:   [{ role: 'user', content: userMessage }],
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        }),
+      });
+      clearTimeout(timer);
+      return res;
+    } catch (err) {
+      clearTimeout(timer);
+      throw err;
+    }
+  };
+
+  let response;
+  try {
+    response = await doFetch();
+  } catch (networkErr) {
+    // "Load failed" (Safari) or "Failed to fetch" (Chrome) = network-level failure
+    // Wait 2s and retry once — covers brief mobile network drops
+    console.warn('First attempt failed, retrying once…', networkErr.message);
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      response = await doFetch();
+    } catch (retryErr) {
+      const msg = retryErr.name === 'AbortError'
+        ? 'Request timed out — web search can take up to 30s. Check your connection and try again.'
+        : 'Network error — could not reach AI service. Check your internet connection and try again.';
+      throw new Error(msg);
+    }
+  }
 
   if (!response.ok) {
     const errData = await response.json().catch(() => ({}));
