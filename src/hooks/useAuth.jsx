@@ -1,6 +1,48 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase, isConfigured } from '../db/supabase.js';
 import { sb } from '../db/supabase.js';
+import { loadInsightsLocally } from '../logic/ai.js';
+
+// ── Sync insights from Supabase into localStorage on login ────────────────────
+// This makes insights the same on every device (mobile, laptop, etc.)
+async function syncInsightsFromCloud(userId) {
+  if (!userId || !isConfigured()) return;
+  try {
+    const { data: rows } = await sb(s =>
+      s.from('insights')
+        .select('data, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(100)
+    );
+    if (!rows?.length) return;
+
+    // Extract the insight objects stored in the 'data' column
+    const cloudInsights = rows
+      .map(r => r.data)
+      .filter(Boolean);
+
+    if (!cloudInsights.length) return;
+
+    // Merge with whatever is already in localStorage on this device
+    const localInsights  = loadInsightsLocally(userId);
+    const allInsights    = [...cloudInsights, ...localInsights];
+
+    // Deduplicate by id — cloud version wins (it's the source of truth)
+    const seen    = new Set();
+    const merged  = allInsights.filter(ins => {
+      if (!ins?.id || seen.has(ins.id)) return false;
+      seen.add(ins.id);
+      return true;
+    }).slice(0, 100);
+
+    // Write merged list back to localStorage — now this device is in sync
+    localStorage.setItem(`udie_insights_${userId}`, JSON.stringify(merged));
+  } catch (err) {
+    // Sync failure is silent — app still works, just shows local insights
+    console.warn('Cloud insight sync failed:', err);
+  }
+}
 
 const AuthCtx = createContext(null);
 
@@ -34,6 +76,8 @@ export function AuthProvider({ children }) {
             setUser(data.session.user);
             const prof = await fetchProfile(data.session.user.id);
             setProfile(prof);
+            // Sync cloud insights on every page load so devices stay in sync
+            syncInsightsFromCloud(data.session.user.id);
           }
 
           // 2. Listen for auth events (sign in / sign out / token refresh)
@@ -113,6 +157,9 @@ export function AuthProvider({ children }) {
         setUser(data.user);
         const prof = await fetchProfile(data.user.id);
         setProfile(prof); // null means no profile yet → Onboarding
+
+        // Sync insights from cloud → localStorage so all devices show the same data
+        syncInsightsFromCloud(data.user.id); // fire-and-forget, non-blocking
       }
       return { user: data?.user || null, error: null };
     }
