@@ -329,7 +329,8 @@ select.input option{background:var(--surface)}
 
 /* Faster tap response on mobile */
 * { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-.content, .modes-scroll { touch-action: pan-y; }
+.content { touch-action: pan-y; }
+.modes-scroll { touch-action: pan-x; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
 /* Reduce expensive backdrop-filter on mobile */
 @media (max-width: 500px) {

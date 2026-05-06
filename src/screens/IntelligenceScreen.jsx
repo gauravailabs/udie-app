@@ -29,11 +29,14 @@ function Typewriter({ text, speed = 20, onDone }) {
 }
 
 // Streaming card — shows insight progressively as it arrives
-function StreamingCard({ insight, modeId, onExpand }) {
-  const [phase,    setPhase]    = useState(0); // 0=title 1=signal 2=impact 3=actions 4=done
-  const [titleDone, setTitleDone] = useState(false);
+function StreamingCard({ insight, modeId, onExpand, skipAnimation }) {
+  // skipAnimation=true when result arrived while user was on a different tab
+  // In that case skip straight to phase 4 (fully rendered, no typewriter)
+  const [phase,    setPhase]    = useState(skipAnimation ? 4 : 0);
+  const [titleDone, setTitleDone] = useState(skipAnimation ? true : false);
 
   useEffect(() => {
+    if (skipAnimation) return; // already at phase 4, no timers needed
     if (titleDone) {
       const t1 = setTimeout(() => setPhase(1), 100);
       const t2 = setTimeout(() => setPhase(2), 600);
@@ -41,7 +44,7 @@ function StreamingCard({ insight, modeId, onExpand }) {
       const t4 = setTimeout(() => setPhase(4), 1400);
       return () => [t1,t2,t3,t4].forEach(clearTimeout);
     }
-  }, [titleDone]);
+  }, [titleDone, skipAnimation]);
 
   // Bug 4 fix: ALWAYS use modeId (what user selected), never trust Claude's mode field
   const mode = MODES[modeId];
@@ -128,6 +131,7 @@ export default function IntelligenceScreen({ navigate }) {
   const [error,   setError]   = useState('');
   // Each entry: { insight, modeId } — modeId locked at submit time
   const [results, setResults] = useState([]);
+  const [newResults, setNewResults] = useState(new Set());
   const textRef    = useRef(null);
   const contentRef = useRef(null);
 
@@ -160,6 +164,13 @@ export default function IntelligenceScreen({ navigate }) {
       saveInsightLocally(withMode, user?.id);
       if (user?.id) saveInsightToDB(withMode, user.id).catch(() => {});
 
+      // If user switched away while this was running, mark the tab so they know
+      setActiveMode(current => {
+        if (current !== lockedMode) {
+          setNewResults(prev => new Set([...prev, lockedMode]));
+        }
+        return current; // don't change activeMode
+      });
       setTimeout(() => contentRef.current?.scrollTo({ top:0, behavior:'smooth' }), 100);
     } catch (e) {
       setError(e.message || 'Intelligence generation failed. Check your VITE_ANTHROPIC_API_KEY.');
@@ -179,9 +190,9 @@ export default function IntelligenceScreen({ navigate }) {
   const handleModeChange = (id) => {
     setActiveMode(id);
     setError('');
-    // Don't clear results — user may want to compare across modes
-    // But DO reset query input
     setQuery('');
+    // Clear the "new result" badge when user switches to that tab
+    setNewResults(prev => { const n = new Set(prev); n.delete(id); return n; });
   };
 
   const examples = EXAMPLES[activeMode] || EXAMPLES.competitive;
@@ -211,6 +222,9 @@ export default function IntelligenceScreen({ navigate }) {
               onClick={() => handleModeChange(m.id)}>
               <span className="mode-pill-icon">{m.icon}</span>
               <span className="mode-pill-label" style={activeMode===m.id?{color:m.color}:{}}>{m.label}</span>
+              {newResults.has(m.id) && (
+                <span style={{ width:7, height:7, borderRadius:'50%', background:'var(--green)', flexShrink:0, display:'inline-block', marginLeft:2 }}/>
+              )}
             </button>
           ))}
         </div>
@@ -277,6 +291,7 @@ export default function IntelligenceScreen({ navigate }) {
             key={entry.insight?.id || idx}
             insight={entry.insight}
             modeId={entry.modeId}
+            skipAnimation={!loading || loadingMode !== activeMode}
             onExpand={i => navigate('detail', { insight: i })}
           />
         ))}
